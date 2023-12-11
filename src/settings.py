@@ -1,0 +1,12 @@
+from decouple import config
+
+DEBUG = True
+DB_HOST=config("DB_HOST")
+DB_PORT=config("DB_PORT")
+POSTGRES_NAME=config("POSTGRES_NAME")
+POSTGRES_DB=config("POSTGRES_DB")
+POSTGRES_USER=config("POSTGRES_USER")
+POSTGRES_PASSWORD=config("POSTGRES_PASSWORD")
+DATABASE_URL=config("POSTGRES_URL")
+
+API_TOKEN=config("API_TOKEN")
