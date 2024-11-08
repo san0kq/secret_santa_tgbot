@@ -2,22 +2,6 @@ version: '3.8'
 
 services:
 
-  coin-glue-dev:
-     container_name: "secret-santa"
-     hostname: "secret-santa"
-     env_file:
-       - ./src/.env
-     build:
-       context: ./src
-       dockerfile: ./Dockerfile
-     restart: always
-     volumes:
-       - ./src:/code
-     working_dir: /code
-     command: ash -c "python main.py"
-     depends_on:
-       - db-dev
-
   db-dev:
     container_name: "secret-santa-db"
     hostname: "secret-santa-db"
@@ -25,7 +9,7 @@ services:
     ports:
       - 5472:5432
     env_file:
-      - ./src/.env
+      - .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}

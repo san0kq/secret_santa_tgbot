@@ -4,6 +4,7 @@ from logging import getLogger
 
 logger = getLogger(__name__)
 
+
 async def message_delete(event: Message | CallbackQuery):
     if isinstance(event, CallbackQuery):
         event = event.message

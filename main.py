@@ -10,31 +10,38 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.command import Command
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.client.session.aiohttp import AiohttpSession
-from settings import API_TOKEN
 from random import choice
 
-from database.user import (
+from src.database.user import (
     get_all_participants,
     add_user,
-    get_all_participants_from_stock,
-    delete_particimant_from_stock,
+    get_free_participants,
+    restart_all,
     fetch_user_db,
-    set_santa_user_db
+    set_santa_user_db,
+    set_selected_participant_db,
 )
-from tools import message_delete
-from callback import ParticipantCallbackData
+from src.database.initialize import initialize_db_data
+from src.settings import API_TOKEN, ADMIN_ID
+from src.tools import message_delete
+from src.callback import ParticipantCallbackData
 
 main_router = Router()
 logger = logging.getLogger(__name__)
 dp = Dispatcher()
 dp.include_router(main_router)
 
+
 @main_router.message(Command("start"))
 @main_router.callback_query(ParticipantCallbackData.filter(F.action == 'menu'))
-async def cmd_start(event: Message | types.CallbackQuery, callback: ParticipantCallbackData = None, state: FSMContext = None):
+async def cmd_start(
+    event: Message | types.CallbackQuery,
+    callback: ParticipantCallbackData = None,
+    state: FSMContext = None
+):
     if isinstance(event, CallbackQuery):
         event = event.message
-    
+
     user_id = event.from_user.id
 
     if user := await fetch_user_db(user_id=user_id):
@@ -56,12 +63,15 @@ async def cmd_start(event: Message | types.CallbackQuery, callback: ParticipantC
             for participant in participants:
                 builder.button(
                     text=participant.name,
-                    callback_data=ParticipantCallbackData(name=participant.name, id=participant.id, action='choice').pack()
+                    callback_data=ParticipantCallbackData(
+                        name=participant.name,
+                        id=participant.id,
+                        action='choice').pack()
                 )
             builder.adjust(1, 1)
         else:
             message_text = '🤷‍♂️ Все участники уже в игре.\n\n🎉 С наступающим Новым годом!'
-    
+
     if isinstance(event, Message):
         await event.answer(
             text=message_text,
@@ -71,12 +81,15 @@ async def cmd_start(event: Message | types.CallbackQuery, callback: ParticipantC
         )
         await message_delete(event)
     else:
-        await event.message.edit_text(text=message_text, reply_markup=builder.as_markup(), parse_mode=ParseMode.HTML)
+        await event.message.edit_text(
+            text=message_text,
+            reply_markup=builder.as_markup(),
+            parse_mode=ParseMode.HTML
+        )
 
 
 @main_router.callback_query(ParticipantCallbackData.filter(F.action == "choice"))
 async def choice_participant(query: CallbackQuery, callback_data: ParticipantCallbackData):
-    user_id = query.from_user.id
     builder = InlineKeyboardBuilder()
     participant_name = callback_data.name
     participant_id = callback_data.id
@@ -134,13 +147,19 @@ async def get_participant(event: Message | CallbackQuery, callback_data: Partici
     participant_id = callback_data.id
     logger.info(participant_id)
 
-    participants = await get_all_participants_from_stock(participant_id=participant_id)
+    participants = await get_free_participants(participant_id=participant_id)
     if participants:
         random_participant = choice(participants)
         participant_name = random_participant.name
-        message_text = f'🎁 Ваш получатель - <b>{participant_name}</b>!\n\n❗️ Запомните это имя, а лучше запишите его куда-нибудь. Больше получить это имя из бота никто не сможет, в том числе и вы.\n\n 🎄 С наступающим Новым годом! 🎄'
+        message_text = (
+            f'🎁 Ваш получатель - <b>{participant_name}</b>!\n\n❗️ '
+            f'Запомните это имя, а лучше запишите его куда-нибудь. '
+            f'Больше получить это имя из бота никто не сможет, в том '
+            f'числе и вы.\n\n 🎄 С наступающим Новым годом! 🎄'
+        )
         await set_santa_user_db(user_id=user_id)
-        photo = FSInputFile('images/secret_santa.png')
+        await set_selected_participant_db(participant_id=random_participant.id)
+        photo = FSInputFile('src/images/secret_santa.png')
         await event.message.answer_photo(
             photo=photo,
             caption=message_text,
@@ -164,11 +183,27 @@ async def get_participant(event: Message | CallbackQuery, callback_data: Partici
             )
             await message_delete(event)
 
-    await delete_particimant_from_stock(participant_id=random_participant.participant_id)
+
+@main_router.message(Command("restart"))
+async def cmd_restart(
+    message: Message,
+    state: FSMContext = None
+):
+    user_id = message.from_user.id
+
+    if str(user_id) != ADMIN_ID:
+        logger.info(f'{user_id} != {ADMIN_ID}')
+        await message.answer('У вас нет доступа к этой команде.')
+        return
+
+    await restart_all()
+
+    await message.answer('Игра сброшена успешно!')
+
 
 async def main():
-    session = AiohttpSession(proxy='http://proxy.server:3128')
-    bot = Bot(token=API_TOKEN, parse_mode=ParseMode.HTML, session=session)
+    bot = Bot(token=API_TOKEN, parse_mode=ParseMode.HTML)
+    await initialize_db_data()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

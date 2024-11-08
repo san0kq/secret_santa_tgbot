@@ -4,21 +4,20 @@ from typing import TYPE_CHECKING
 from sqlalchemy import delete, update
 import logging
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_scoped_session
 from sqlalchemy.future import select
 
-from database.database import db_session
+from src.database.database import db_session
 
-from database.models.models import (
+from src.database.models.models import (
     User,
     Participant,
-    ParticipantStock
 )
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_scoped_session
 
 logger = logging.getLogger(__name__)
+
 
 async def fetch_user_db(
     user_id: int, session: async_scoped_session[AsyncSession] = db_session
@@ -40,27 +39,45 @@ async def set_santa_user_db(
         await session.commit()
 
 
+async def set_selected_participant_db(
+    participant_id: int,
+    session: async_scoped_session[AsyncSession] = db_session
+):
+    stmt = update(Participant).where(Participant.id == participant_id).values(is_selected=True)
+    async with session.begin():
+        await session.execute(stmt)
+        await session.commit()
+
+
 async def get_all_participants(
     session: async_scoped_session[AsyncSession] = db_session
 ) -> list[Participant]:
-    stmt = select(Participant).outerjoin(User, User.participant_id == Participant.id).filter(User.user_id.is_(None))
+    stmt = select(Participant).outerjoin(
+        User,
+        User.participant_id == Participant.id).filter(User.user_id.is_(None))
     async with session.begin():
         result = await session.execute(stmt)
         participants = result.scalars().all()
         return participants
-    
 
-async def get_all_participants_from_stock(
+
+async def get_free_participants(
     participant_id: int,
     session: async_scoped_session[AsyncSession] = db_session
-) -> list[ParticipantStock]:
+) -> list[Participant]:
     try:
-        stmt = select(ParticipantStock.participant_id, Participant.name).join(Participant).filter(ParticipantStock.participant_id != participant_id)
+        stmt = (
+            select(Participant.id, Participant.name)
+            .where(
+                Participant.id != participant_id,
+                Participant.is_selected == False
+            )
+        )
         async with session.begin():
             result = await session.execute(stmt)
             participants = result.fetchall()
             return participants
-        
+
     except Exception as err:
         logger.info(err)
 
@@ -79,11 +96,12 @@ async def add_user(
         await session.commit()
 
 
-async def delete_particimant_from_stock(
-    participant_id: int,
+async def restart_all(
     session: async_scoped_session[AsyncSession] = db_session
 ) -> None:
-    stmt = delete(ParticipantStock).where(ParticipantStock.participant_id == participant_id)
+    stmt = delete(User)
+    stmt2 = update(Participant).values(is_selected=False)
     async with session.begin():
         await session.execute(stmt)
+        await session.execute(stmt2)
         await session.commit()

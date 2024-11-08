@@ -1,8 +1,6 @@
 import re
 from datetime import datetime
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
-from database.database import Base
-
 from sqlalchemy import (
     BigInteger,
     ForeignKey,
@@ -12,7 +10,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 from sqlalchemy.sql import func
 
-from database.database import Base
+from src.database.database import Base
 
 
 class BaseTable(Base):
@@ -65,20 +63,14 @@ class User(BaseTable):
         default=False
     )
 
+
 class Participant(BaseTable):
     __tablename__ = "participants"
 
     name: Mapped[str] = mapped_column(
         String(64), unique=True
     )
-
-
-
-class ParticipantStock(BaseTable):
-    __tablename__ = "participants_stock"
-
-    participant_id: Mapped[int] = mapped_column(
-        BigInteger,
-        ForeignKey("participants.id", ondelete='CASCADE'),
-        comment="Participant id",
+    is_selected: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False
     )
