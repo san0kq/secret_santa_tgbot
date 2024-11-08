@@ -5,7 +5,8 @@ from sqlalchemy import (
     BigInteger,
     ForeignKey,
     String,
-    Boolean
+    Boolean,
+    Text
 )
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 from sqlalchemy.sql import func
@@ -69,6 +70,10 @@ class Participant(BaseTable):
 
     name: Mapped[str] = mapped_column(
         String(64), unique=True
+    )
+    description: Mapped[str] = mapped_column(
+        Text,
+        nullable=False
     )
     is_selected: Mapped[bool] = mapped_column(
         Boolean,

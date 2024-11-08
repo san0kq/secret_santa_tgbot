@@ -67,7 +67,7 @@ async def get_free_participants(
 ) -> list[Participant]:
     try:
         stmt = (
-            select(Participant.id, Participant.name)
+            select(Participant.id, Participant.name, Participant.description)
             .where(
                 Participant.id != participant_id,
                 Participant.is_selected == False
@@ -105,3 +105,15 @@ async def restart_all(
         await session.execute(stmt)
         await session.execute(stmt2)
         await session.commit()
+
+
+async def get_participant(
+        participant_id: int,
+        session: async_scoped_session[AsyncSession] = db_session
+) -> Participant:
+    stmt = select(Participant).where(Participant.id == participant_id).limit(1)
+
+    async with session.begin():
+        result = await session.execute(stmt)
+        participant = result.scalar_one()
+        return participant

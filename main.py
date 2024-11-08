@@ -20,11 +20,13 @@ from src.database.user import (
     fetch_user_db,
     set_santa_user_db,
     set_selected_participant_db,
+    get_participant as get_participant_db,
 )
 from src.database.initialize import initialize_db_data
 from src.settings import API_TOKEN, ADMIN_ID
 from src.tools import message_delete
-from src.callback import ParticipantCallbackData
+from src.callback import ParticipantCallbackData, SantaIdeasCallbackData
+from src.yandex_ai import get_santa_ideas
 
 main_router = Router()
 logger = logging.getLogger(__name__)
@@ -100,7 +102,7 @@ async def choice_participant(query: CallbackQuery, callback_data: ParticipantCal
         callback_data=ParticipantCallbackData(action='add', name=participant_name, id=participant_id)
     )
     builder.button(
-        text="❌ Нет, я ошибся",
+        text="❌ Нет, перевыбрать",
         callback_data=ParticipantCallbackData(action='menu', name=None, id=None)
     )
     builder.adjust(2, 1)
@@ -146,6 +148,9 @@ async def get_participant(event: Message | CallbackQuery, callback_data: Partici
     builder = InlineKeyboardBuilder()
     participant_id = callback_data.id
     logger.info(participant_id)
+    user_participant = await get_participant_db(participant_id=participant_id)
+    user_name = user_participant.name
+    logger.info(user_name)
 
     participants = await get_free_participants(participant_id=participant_id)
     if participants:
@@ -153,13 +158,26 @@ async def get_participant(event: Message | CallbackQuery, callback_data: Partici
         participant_name = random_participant.name
         message_text = (
             f'🎁 Ваш получатель - <b>{participant_name}</b>!\n\n❗️ '
-            f'Запомните это имя, а лучше запишите его куда-нибудь. '
+            f'Запомните это имя или запишите его куда-нибудь.\n'
+            f'А лучше просто не удаляйте это сообщение.\n'
             f'Больше получить это имя из бота никто не сможет, в том '
-            f'числе и вы.\n\n 🎄 С наступающим Новым годом! 🎄'
+            f'числе и вы.\n\nВы можете попросить настоящего Санту помочь '
+            f'вам с выбором подарка для вашего получателя. Нажмите на '
+            f'кнопку ниже, подождите немного и он придумает '
+            f'несколько вариантов.\n\n🎄 С наступающим Новым годом! 🎄'
         )
         await set_santa_user_db(user_id=user_id)
         await set_selected_participant_db(participant_id=random_participant.id)
         photo = FSInputFile('src/images/secret_santa.png')
+
+        builder.button(
+            text='🎁 Спросить у Санты идеи для подарков 🎁',
+            callback_data=SantaIdeasCallbackData(
+                action='idea',
+                name=user_name,
+                recipient_id=random_participant.id
+            )
+        )
         await event.message.answer_photo(
             photo=photo,
             caption=message_text,
@@ -182,6 +200,49 @@ async def get_participant(event: Message | CallbackQuery, callback_data: Partici
                 parse_mode=ParseMode.HTML
             )
             await message_delete(event)
+
+
+@main_router.callback_query(SantaIdeasCallbackData.filter(F.action == "idea"))
+async def generate_ideas(
+    callback: CallbackQuery,
+    callback_data: SantaIdeasCallbackData
+):
+    builder = InlineKeyboardBuilder()
+
+    user_name = callback_data.name
+    recipient_id = callback_data.recipient_id
+
+    recipient_paricipant = await get_participant_db(
+        participant_id=recipient_id
+    )
+
+    try:
+        message_text = await get_santa_ideas(
+            name=user_name,
+            recipient_name=recipient_paricipant.name,
+            description=recipient_paricipant.description
+        )
+    except Exception as err:
+        logger.error(err)
+        message_text = (
+            'Санта оказался недоступен. Наверное очень занят.\n'
+            'Попробуйте позже нажать на эту кнопку.'
+        )
+
+    builder.button(
+        text='🎁 Спросить у Санты ещё раз 🎁',
+        callback_data=SantaIdeasCallbackData(
+            action='idea',
+            name=user_name,
+            recipient_id=recipient_id
+        )
+    )
+    await callback.message.answer(
+        text=message_text,
+        reply_markup=builder.as_markup(),
+        disable_notification=True,
+        parse_mode=ParseMode.HTML
+    )
 
 
 @main_router.message(Command("restart"))
